@@ -13,30 +13,36 @@
 // You should have received a copy of the GNU General Public License
 // along with irwir.  If not, see <http://www.gnu.org/licenses/>.
 
-extern crate evdev_rs;
 extern crate input_linux;
 extern crate ref_slice;
-use std::fs::File;
+extern crate toml;
 use input_linux::{EvdevHandle, UInputHandle};
 use input_linux::{InputEvent, Event, KeyEvent};
+use std::error;
+use std::fs::File;
+use std::io::prelude::*;
 
-// I don't know a better way to create events from strings
-// https://github.com/arcnmx/input-linux-rs/issues/1
-fn key_from_name(s: &str) -> input_linux::Key {
-    let ec = evdev_rs::enums::EventCode::from_str(&evdev_rs::enums::EventType::EV_KEY, s).unwrap();
-    let code = evdev_rs::util::event_code_to_int(&ec).1;
-    input_linux::Key::from_code(code as u16).unwrap()
+#[macro_use]
+extern crate serde_derive;
+
+
+#[derive(Debug, Serialize, Deserialize)]
+struct IrwirConfig {
+    device_path: String,
+    abort_key: input_linux::Key,
 }
 
 
-fn main() {
-    let device_path = String::from("/dev/input/by-path/platform-i8042-serio-0-event-kbd");
-    println!("{}", device_path);
+fn read_config(fname: &str) -> Result<IrwirConfig, Box<error::Error>> {
+    let mut f = File::open(fname)?;
+    let mut s = String::new();
+    f.read_to_string(&mut s)?;
+    Ok(toml::from_str(&s)?)
+}
 
-    let abort_key_name = "KEY_PAUSE";
-    let abort_key = key_from_name(abort_key_name);
 
-    let in_fd = File::open(device_path).unwrap();
+fn irwir(config: IrwirConfig) {
+    let in_fd = File::open(config.device_path).unwrap();
     let in_dev = EvdevHandle::new(&in_fd);
     in_dev.grab(true).unwrap();
 
@@ -45,9 +51,10 @@ fn main() {
     ui_dev.set_evbit(input_linux::EventKind::Key).unwrap();
     ui_dev.set_keybit(input_linux::Key::KeyA).unwrap();
     ui_dev.set_keybit(input_linux::Key::KeyB).unwrap();
-    ui_dev.create(&input_linux::InputId::default(), b"test", 0, &[]).unwrap();
+    ui_dev
+        .create(&input_linux::InputId::default(), b"test", 0, &[])
+        .unwrap();
 
-    println!("Events:");
     loop {
         // TODO: am I overcomplicating things?
         let mut input_event = unsafe { std::mem::zeroed() };
@@ -56,15 +63,27 @@ fn main() {
             let ev = *InputEvent::from_raw(&input_event).unwrap();
             let ev = Event::new(ev).unwrap();
             match ev {
-                Event::Key(KeyEvent { key, value, .. }) if key == abort_key && value == 0 => break,
+                Event::Key(KeyEvent { key, value, .. })
+                    if key == config.abort_key && value == 0 => break,
                 _ => {
                     //println!("{:?}", ev);
-                    ui_dev.write(ref_slice::ref_slice(&ev.as_ref().as_raw())).unwrap();
+                    ui_dev
+                        .write(ref_slice::ref_slice(&ev.as_ref().as_raw()))
+                        .unwrap();
                 }
             }
         } else {
             // TODO: more idiomatic error handling? match costs indentation
             panic!();
         }
+    }
+}
+
+
+fn main() {
+    let config = read_config("config.toml");
+    match config {
+        Ok(c) => irwir(c),
+        Err(e) => println!("Error reading config: {}", e),
     }
 }
