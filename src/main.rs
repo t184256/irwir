@@ -30,6 +30,7 @@ extern crate serde_derive;
 struct IrwirConfig {
     device_path: String,
     abort_key: input_linux::Key,
+    exported_keys: Vec<input_linux::Key>,
 }
 
 
@@ -49,8 +50,9 @@ fn irwir(config: IrwirConfig) {
     let ui_fd = File::create("/dev/uinput").unwrap();
     let ui_dev = UInputHandle::new(&ui_fd);
     ui_dev.set_evbit(input_linux::EventKind::Key).unwrap();
-    ui_dev.set_keybit(input_linux::Key::KeyA).unwrap();
-    ui_dev.set_keybit(input_linux::Key::KeyB).unwrap();
+    for exported_key in config.exported_keys {
+        ui_dev.set_keybit(exported_key).unwrap();
+    }
     ui_dev
         .create(&input_linux::InputId::default(), b"test", 0, &[])
         .unwrap();

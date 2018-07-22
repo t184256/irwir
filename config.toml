@@ -1,2 +1,3 @@
 device_path = "/dev/input/by-path/platform-i8042-serio-0-event-kbd"
 abort_key = "KeyPause"
+exported_keys = ["KeyA", "KeyB"]
