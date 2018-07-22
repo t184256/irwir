@@ -1,7 +1,11 @@
 [package]
 name = "irwir"
-version = "0.1.0"
 authors = ["Alexander Sosedkin <monk@unboiled.info>"]
+description = "An input remapper for linux"
+keywords = ["uinput", "linux", "input", "input-remapping"]
+license = "GPL-3.0-or-later"
+repository = "https://github.com/t184256/irwir"
+version = "0.1.0"
 
 [dependencies]
 evdev-rs = "0.1.0"
