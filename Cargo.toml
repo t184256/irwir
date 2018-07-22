@@ -1,0 +1,15 @@
+[package]
+name = "irwir"
+version = "0.1.0"
+authors = ["Alexander Sosedkin <monk@unboiled.info>"]
+
+[dependencies]
+evdev-rs = "0.1.0"
+input-linux = "0.0.1"
+ref_slice = "1.1.1"
+#libc = "0.2.42"
+#uinput = "0.1.3"
+#evdev = "0.10.1"
+#libevdev-sys = "0.1.1"
+#evdev-sys = "0.1.0"
+#input-linux-sys = "0.3.1"
