@@ -17,7 +17,9 @@ extern crate input_linux;
 extern crate ref_slice;
 extern crate toml;
 use input_linux::{EvdevHandle, UInputHandle};
-use input_linux::{InputEvent, Event, KeyEvent};
+use input_linux::{InputId, EventKind};
+use input_linux::{InputEvent, Event, KeyEvent, Key};
+use std::collections::HashMap;
 use std::error;
 use std::fs::File;
 use std::io::prelude::*;
@@ -26,11 +28,18 @@ use std::io::prelude::*;
 extern crate serde_derive;
 
 
+type Tag = String;
+
+
 #[derive(Debug, Serialize, Deserialize)]
 struct IrwirConfig {
     device_path: String,
-    abort_key: input_linux::Key,
-    exported_keys: Vec<input_linux::Key>,
+    abort_key: Key,
+    exported_keys: Vec<Key>,
+    layout: HashMap<Tag, Key>,
+    #[serde(skip)]
+    inverse_layout: HashMap<Key, Tag>,
+    map: HashMap<Tag, Key>,
 }
 
 
@@ -38,7 +47,11 @@ fn read_config(fname: &str) -> Result<IrwirConfig, Box<error::Error>> {
     let mut f = File::open(fname)?;
     let mut s = String::new();
     f.read_to_string(&mut s)?;
-    Ok(toml::from_str(&s)?)
+    let mut cfg : IrwirConfig = toml::from_str(&s)?;
+    for (tag, key) in &cfg.layout {
+        cfg.inverse_layout.insert(key.clone(), tag.clone());
+    }
+    Ok(cfg)
 }
 
 
@@ -49,12 +62,12 @@ fn irwir(config: IrwirConfig) {
 
     let ui_fd = File::create("/dev/uinput").unwrap();
     let ui_dev = UInputHandle::new(&ui_fd);
-    ui_dev.set_evbit(input_linux::EventKind::Key).unwrap();
+    ui_dev.set_evbit(EventKind::Key).unwrap();
     for exported_key in config.exported_keys {
         ui_dev.set_keybit(exported_key).unwrap();
     }
     ui_dev
-        .create(&input_linux::InputId::default(), b"test", 0, &[])
+        .create(&InputId::default(), b"test", 0, &[])
         .unwrap();
 
     loop {
@@ -67,6 +80,17 @@ fn irwir(config: IrwirConfig) {
             match ev {
                 Event::Key(KeyEvent { key, value, .. })
                     if key == config.abort_key && value == 0 => break,
+                Event::Key(KeyEvent { time, key, value, .. })
+                    if config.inverse_layout.contains_key(&key) => {
+                        let tag = config.inverse_layout.get(&key).unwrap();  // TODO: idiomatize
+                        let remapped_key = config.map.get(tag).unwrap();  // TODO: log if missing
+                        let mut remapped_event = KeyEvent::new(
+                            time, *remapped_key, value
+                        );
+                        ui_dev
+                            .write(ref_slice::ref_slice(&remapped_event.as_ref()))
+                            .unwrap();
+                    }
                 _ => {
                     //println!("{:?}", ev);
                     ui_dev
