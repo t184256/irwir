@@ -13,23 +13,36 @@
 // You should have received a copy of the GNU General Public License
 // along with irwir.  If not, see <http://www.gnu.org/licenses/>.
 
+extern crate gluon;
+#[macro_use]
+extern crate gluon_codegen;
+#[macro_use]
+extern crate gluon_vm;
+#[macro_use]
+extern crate indoc;
 extern crate input_linux;
+#[macro_use]
+extern crate log;
 extern crate ref_slice;
+extern crate ron;
+#[macro_use]
+extern crate serde_derive;
 extern crate toml;
-use input_linux::{EvdevHandle, UInputHandle};
-use input_linux::{InputId, EventKind};
-use input_linux::{InputEvent, Event, KeyEvent, Key};
+
+use input_linux::EvdevHandle;
+use input_linux::{Event, InputEvent, Key, KeyEvent};
 use std::collections::HashMap;
 use std::error;
 use std::fs::File;
 use std::io::prelude::*;
 
-#[macro_use]
-extern crate serde_derive;
-
-
-type Tag = String;
-
+mod actions;
+use actions::Tag;
+mod enums_from_names;
+mod scripting;
+use scripting::{IrwirGluonFunc, ScriptingEngine};
+mod uinput_device;
+use uinput_device::UInputDevice;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct IrwirConfig {
@@ -37,65 +50,65 @@ struct IrwirConfig {
     abort_key: Key,
     exported_keys: Vec<Key>,
     layout: HashMap<Tag, Key>,
-    #[serde(skip)]
-    inverse_layout: HashMap<Key, Tag>,
-    map: HashMap<Tag, Key>,
+    map: HashMap<Tag, String>,
 }
-
 
 fn read_config(fname: &str) -> Result<IrwirConfig, Box<error::Error>> {
     let mut f = File::open(fname)?;
     let mut s = String::new();
     f.read_to_string(&mut s)?;
-    let mut cfg : IrwirConfig = toml::from_str(&s)?;
-    for (tag, key) in &cfg.layout {
-        cfg.inverse_layout.insert(key.clone(), tag.clone());
-    }
+    let cfg: IrwirConfig = toml::from_str(&s)?;
     Ok(cfg)
 }
 
+fn create_function_mappings<'a>(
+    cfg: &IrwirConfig,
+    se: &'a ScriptingEngine,
+) -> HashMap<Key, IrwirGluonFunc<'a>> {
+    let mut map_to_functions = HashMap::new();
+    for (tag, key) in &cfg.layout {
+        if let Some(mapped_code) = cfg.map.get(tag) {
+            let func = se.make_func(mapped_code);
+            map_to_functions.insert(key.clone(), func);
+        } else {
+            warn!("Unmapped tag {}", tag);
+        }
+    }
+    map_to_functions
+}
 
 fn irwir(config: IrwirConfig) {
+    let se = ScriptingEngine::new();
+    let mut map_to_functions = create_function_mappings(&config, &se);
+
     let in_fd = File::open(config.device_path).unwrap();
     let in_dev = EvdevHandle::new(&in_fd);
     in_dev.grab(true).unwrap();
 
-    let ui_fd = File::create("/dev/uinput").unwrap();
-    let ui_dev = UInputHandle::new(&ui_fd);
-    ui_dev.set_evbit(EventKind::Key).unwrap();
-    for exported_key in config.exported_keys {
-        ui_dev.set_keybit(exported_key).unwrap();
-    }
-    ui_dev
-        .create(&InputId::default(), b"test", 0, &[])
-        .unwrap();
+    let ui_dev = UInputDevice::new(config.exported_keys);
 
     loop {
         // TODO: am I overcomplicating things?
         let mut input_event = unsafe { std::mem::zeroed() };
         let a = in_dev.read(ref_slice::ref_slice_mut(&mut input_event));
         if let Ok(1) = a {
-            let ev = *InputEvent::from_raw(&input_event).unwrap();
-            let ev = Event::new(ev).unwrap();
+            let iev = *InputEvent::from_raw(&input_event).unwrap();
+            let ev = Event::new(iev).unwrap();
             match ev {
                 Event::Key(KeyEvent { key, value, .. })
-                    if key == config.abort_key && value == 0 => break,
-                Event::Key(KeyEvent { time, key, value, .. })
-                    if config.inverse_layout.contains_key(&key) => {
-                        let tag = config.inverse_layout.get(&key).unwrap();  // TODO: idiomatize
-                        let remapped_key = config.map.get(tag).unwrap();  // TODO: log if missing
-                        let mut remapped_event = KeyEvent::new(
-                            time, *remapped_key, value
-                        );
-                        ui_dev
-                            .write(ref_slice::ref_slice(&remapped_event.as_ref()))
-                            .unwrap();
-                    }
+                    if key == config.abort_key && value == 0 =>
+                {
+                    break
+                }
+                Event::Key(KeyEvent { key, value, .. }) if map_to_functions.contains_key(&key) => {
+                    // TODO: idiomatize lookup
+                    let mut func = map_to_functions.get_mut(&key).unwrap();
+                    let action = func.call(value).unwrap();
+                    action.execute(iev, &ui_dev, &se);
+                }
                 _ => {
                     //println!("{:?}", ev);
-                    ui_dev
-                        .write(ref_slice::ref_slice(&ev.as_ref().as_raw()))
-                        .unwrap();
+                    ui_dev.simulate(InputEvent::from(ev)); // could be nicer?
                 }
             }
         } else {
@@ -104,7 +117,6 @@ fn irwir(config: IrwirConfig) {
         }
     }
 }
-
 
 fn main() {
     let config = read_config("config.toml");
