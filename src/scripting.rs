@@ -19,9 +19,9 @@ use gluon::vm::api::FunctionRef;
 use gluon::vm::ExternModule;
 use gluon::{new_vm, Compiler, RootedThread};
 
-use actions::MapToKey;
+use actions::Action;
 
-pub type IrwirGluonFunc<'t> = FunctionRef<'t, fn(i32) -> MapToKey>;
+pub type IrwirGluonFunc<'t> = FunctionRef<'t, fn(i32) -> Action>;
 
 pub struct ScriptingEngine {
     vm: RootedThread,
@@ -30,12 +30,14 @@ pub struct ScriptingEngine {
 impl ScriptingEngine {
     pub fn new() -> Self {
         let vm = new_vm();
-        vm.register_type::<MapToKey>("MapToKey", &[]).unwrap();
+        vm.register_type::<Action>("Action", &[]).unwrap();
         fn load_mod(vm: &gluon::Thread) -> gluon::vm::Result<ExternModule> {
             ExternModule::new(
                 vm,
                 record! {
-                    map_to_key => primitive!(1 MapToKey::new),
+                    event => primitive!(3 |kind_name, code_name, value|
+                                           Action::Event{kind_name, code_name, value}),
+                    key => primitive!(1 |key_name| Action::Key(key_name)),
                 },
             )
         }
@@ -46,7 +48,7 @@ impl ScriptingEngine {
     pub fn make_func(&self, s: &String) -> IrwirGluonFunc {
         let prelude = indoc!(
             r#"
-            let {map_to_key} = import! irwir_internals
+            let { event, key } = import! irwir_internals
             \value ->
         "#
         );
@@ -64,8 +66,15 @@ mod tests {
     #[test]
     fn scripting_test() {
         let se = ScriptingEngine::new();
-        let mut f = se.make_func("map_to_key \"Whoa\"".to_string());
-        let a = f.call(3).unwrap();
-        assert_eq!(a, MapToKey::new("Whoa".to_string()));
+        let mut f = se.make_func(&"key \"KeyA\"".to_string());
+        let action: Action = f.call(3).unwrap();
+        match action {
+            Action::Key(key_action) => {
+                assert_eq!(key_action, Key::new("KeyA".to_string()));
+            }
+            _ => {
+                unreachable!();
+            }
+        }
     }
 }

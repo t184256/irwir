@@ -7,5 +7,5 @@ KEY_A = 'KeyA'
 KEY_B = 'KeyB'
 
 [map]
-KEY_A = 'map_to_key "KeyB"'
-KEY_B = 'map_to_key "KeyA"'
+KEY_A = 'key "KeyB"'
+KEY_B = 'event "Key" "KeyA" value'

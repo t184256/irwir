@@ -30,26 +30,27 @@ extern crate serde_derive;
 extern crate toml;
 
 use input_linux::EvdevHandle;
-use input_linux::{Event, InputEvent, Key, KeyEvent};
+use input_linux::{Event, InputEvent, KeyEvent};
 use std::collections::HashMap;
 use std::error;
 use std::fs::File;
 use std::io::prelude::*;
 
 mod actions;
-use actions::Tag;
 mod enums_from_names;
 mod scripting;
 use scripting::{IrwirGluonFunc, ScriptingEngine};
 mod uinput_device;
 use uinput_device::UInputDevice;
 
+pub type Tag = String;
+
 #[derive(Debug, Serialize, Deserialize)]
 struct IrwirConfig {
     device_path: String,
-    abort_key: Key,
-    exported_keys: Vec<Key>,
-    layout: HashMap<Tag, Key>,
+    abort_key: input_linux::Key,
+    exported_keys: Vec<input_linux::Key>,
+    layout: HashMap<Tag, input_linux::Key>,
     map: HashMap<Tag, String>,
 }
 
@@ -64,7 +65,7 @@ fn read_config(fname: &str) -> Result<IrwirConfig, Box<error::Error>> {
 fn create_function_mappings<'a>(
     cfg: &IrwirConfig,
     se: &'a ScriptingEngine,
-) -> HashMap<Key, IrwirGluonFunc<'a>> {
+) -> HashMap<input_linux::Key, IrwirGluonFunc<'a>> {
     let mut map_to_functions = HashMap::new();
     for (tag, key) in &cfg.layout {
         if let Some(mapped_code) = cfg.map.get(tag) {

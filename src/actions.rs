@@ -13,23 +13,27 @@
 // You should have received a copy of the GNU General Public License
 // along with irwir.  If not, see <http://www.gnu.org/licenses/>.
 
-use enums_from_names::parse_key;
-use input_linux::{InputEvent, KeyEvent};
+use enums_from_names::{parse_abs, parse_event_kind, parse_key, parse_rel, parse_syn};
+use input_linux::{
+    AbsoluteEvent, EventKind, InputEvent, KeyEvent, RelativeEvent, SynchronizeEvent,
+};
 use scripting::ScriptingEngine;
 use uinput_device::UInputDevice;
 
-pub type Tag = String;
+// I chose enum-style 'polymorphism' for the ease of traversal of the gluon boundary
 
 #[derive(VmType, Getable, Pushable, Debug, PartialEq)]
-#[gluon(vm_type = "MapToKey")]
-pub struct MapToKey {
-    tag: Tag,
+#[gluon(vm_type = "Action")]
+pub enum Action {
+    Event {
+        kind_name: String,
+        code_name: String,
+        value: i32,
+    },
+    Key(String),
 }
 
-impl MapToKey {
-    pub fn new(t: Tag) -> MapToKey {
-        MapToKey { tag: t }
-    }
+impl Action {
     pub fn execute(
         &self,
         parent_event: InputEvent,
@@ -37,8 +41,43 @@ impl MapToKey {
         _: &ScriptingEngine,
     ) {
         let InputEvent { time, value, .. } = parent_event;
-        let key = parse_key(&self.tag).unwrap();
-        let event = KeyEvent::new(time, key, value);
-        uinput_device.simulate(InputEvent::from(event)); // could be nicer?
+        match self {
+            Action::Key(key_name) => {
+                let key = parse_key(&key_name).unwrap();
+                let event = KeyEvent::new(time, key, value);
+                uinput_device.simulate(InputEvent::from(event)); // could be nicer?
+            }
+            Action::Event {
+                kind_name,
+                code_name,
+                value,
+            } => {
+                let kind = parse_event_kind(kind_name).unwrap();
+                // TODO: make nicer?
+                match kind {
+                    EventKind::Synchronize => uinput_device.simulate(InputEvent::from(
+                        SynchronizeEvent::new(time, parse_syn(code_name).unwrap(), *value),
+                    )),
+                    EventKind::Key => uinput_device.simulate(InputEvent::from(KeyEvent::new(
+                        time,
+                        parse_key(code_name).unwrap(),
+                        *value,
+                    ))),
+                    EventKind::Relative => uinput_device.simulate(InputEvent::from(
+                        RelativeEvent::new(time, parse_rel(code_name).unwrap(), *value),
+                    )),
+                    EventKind::Absolute => uinput_device.simulate(InputEvent::from(
+                        AbsoluteEvent::new(time, parse_abs(code_name).unwrap(), *value),
+                    )),
+                    // TODO: add more
+                    _ => uinput_device.simulate(InputEvent {
+                        time,
+                        kind,
+                        code: code_name.parse::<u16>().unwrap(),
+                        value: *value,
+                    }),
+                };
+            }
+        }
     }
 }
