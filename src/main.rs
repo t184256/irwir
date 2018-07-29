@@ -41,15 +41,18 @@ mod enums_from_names;
 mod scripting;
 use scripting::{IrwirGluonFunc, ScriptingEngine};
 mod uinput_device;
-use uinput_device::UInputDevice;
+use uinput_device::{AbsInfo, UInputDevice};
 
 pub type Tag = String;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct IrwirConfig {
     device_path: String,
+    simulated_device_name: String,
     abort_key: input_linux::Key,
     exported_keys: Vec<input_linux::Key>,
+    exported_abs: HashMap<String, AbsInfo>,
+    exported_rel: Vec<input_linux::RelativeAxis>,
     layout: HashMap<Tag, input_linux::Key>,
     map: HashMap<Tag, String>,
 }
@@ -86,7 +89,12 @@ fn irwir(config: IrwirConfig) {
     let in_dev = EvdevHandle::new(&in_fd);
     in_dev.grab(true).unwrap();
 
-    let ui_dev = UInputDevice::new(config.exported_keys);
+    let ui_dev = UInputDevice::new(
+        config.simulated_device_name,
+        config.exported_keys,
+        config.exported_abs,
+        config.exported_rel,
+    );
 
     loop {
         // TODO: am I overcomplicating things?
@@ -109,7 +117,7 @@ fn irwir(config: IrwirConfig) {
                 }
                 _ => {
                     //println!("{:?}", ev);
-                    ui_dev.simulate(InputEvent::from(ev)); // could be nicer?
+                    //ui_dev.simulate(InputEvent::from(ev)); // could be nicer?
                 }
             }
         } else {

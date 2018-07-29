@@ -15,7 +15,8 @@
 
 use enums_from_names::{parse_abs, parse_event_kind, parse_key, parse_rel, parse_syn};
 use input_linux::{
-    AbsoluteEvent, EventKind, InputEvent, KeyEvent, RelativeEvent, SynchronizeEvent,
+    AbsoluteAxis, AbsoluteEvent, EventKind, InputEvent, KeyEvent, RelativeEvent, SynchronizeEvent,
+    SynchronizeKind,
 };
 use scripting::ScriptingEngine;
 use uinput_device::UInputDevice;
@@ -30,7 +31,16 @@ pub enum Action {
         code_name: String,
         value: i32,
     },
+    Syn,
     Key(String),
+    Button(String),
+    Press(String),
+    Release(String),
+    Repeat(String),
+    PressRelease(String),
+    Abs(String, i32),
+    Rel(String, i32),
+    XY(i32, i32),
 }
 
 impl Action {
@@ -41,11 +51,49 @@ impl Action {
         _: &ScriptingEngine,
     ) {
         let InputEvent { time, value, .. } = parent_event;
+        let simulate_key = |key_name: &String, value| {
+            uinput_device.simulate(InputEvent::from(KeyEvent::new(
+                time,
+                parse_key(&key_name).unwrap(),
+                value,
+            )))
+        };
         match self {
-            Action::Key(key_name) => {
+            Action::Syn => uinput_device.simulate(InputEvent::from(SynchronizeEvent::new(
+                time,
+                SynchronizeKind::Report,
+                0,
+            ))),
+            Action::Key(key_name) => simulate_key(key_name, value),
+            Action::Button(key_name) => if value != 2 {
+                simulate_key(key_name, value)
+            },
+            Action::Press(key_name) => simulate_key(key_name, 1),
+            Action::Release(key_name) => simulate_key(key_name, 0),
+            Action::Repeat(key_name) => simulate_key(key_name, 2),
+            Action::PressRelease(key_name) => {
                 let key = parse_key(&key_name).unwrap();
-                let event = KeyEvent::new(time, key, value);
-                uinput_device.simulate(InputEvent::from(event)); // could be nicer?
+                uinput_device.simulate(InputEvent::from(KeyEvent::new(time, key, 1)));
+                uinput_device.simulate(InputEvent::from(KeyEvent::new(time, key, 0)));
+            }
+            Action::Abs(abs_name, value) => {
+                let abs = parse_abs(&abs_name).unwrap();
+                uinput_device.simulate(InputEvent::from(AbsoluteEvent::new(time, abs, *value)));
+            }
+            Action::Rel(rel_name, value) => {
+                let rel = parse_rel(&rel_name).unwrap();
+                uinput_device.simulate(InputEvent::from(RelativeEvent::new(time, rel, *value)));
+            }
+            Action::XY(value_x, value_y) => {
+                // hack: refresh value
+                uinput_device.simulate_several(&[
+                    InputEvent::from(AbsoluteEvent::new(time, AbsoluteAxis::X, *value_x + 1)),
+                    InputEvent::from(AbsoluteEvent::new(time, AbsoluteAxis::Y, *value_y)),
+                ]);
+                uinput_device.simulate_several(&[
+                    InputEvent::from(AbsoluteEvent::new(time, AbsoluteAxis::X, *value_x)),
+                    InputEvent::from(AbsoluteEvent::new(time, AbsoluteAxis::Y, *value_y)),
+                ]);
             }
             Action::Event {
                 kind_name,

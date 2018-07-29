@@ -1,11 +1,28 @@
 device_path = '/dev/input/by-path/platform-i8042-serio-0-event-kbd'
+simulated_device_name = 'Simulated with irwir'
 abort_key = 'KeyPause'
-exported_keys = ['KeyA', 'KeyB']
+exported_keys = ['KeyA', 'KeyB', 'KeyC', 'KeyD', 'ButtonLeft']
+# X server supports devices that are either absolute...
+#exported_abs = { 'X' = { min = 0, max = 1920 } , 'Y' = { min = 0, max = 1080 } }
+#exported_rel = []
+# ... or relative, but doesn't support both in one device.
+exported_abs = {}
+exported_rel = ['X', 'Y']
 
 [layout]
 KEY_A = 'KeyA'
 KEY_B = 'KeyB'
+KEY_C = 'KeyC'
+TEST_ABS_1 = 'KeyQ'
+TEST_ABS_2 = 'KeyW'
+TEST_CLICK = 'Key1'
+TEST_REL = 'KeyE'
 
 [map]
 KEY_A = 'key "KeyB"'
 KEY_B = 'event "Key" "KeyA" value'
+KEY_C = 'if value == 0 then (press_release "KeyC") else (press_release "KeyD")'
+TEST_ABS_1 = 'xy 200 400'
+TEST_ABS_2 = 'xy 100 300'
+TEST_ABS_3 = 'button "ButtonLeft"'
+TEST_REL = 'rel "Y" (if value == 1 then 20 else (if value == 0 then -20 else 0))'

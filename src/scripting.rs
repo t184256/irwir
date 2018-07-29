@@ -37,7 +37,16 @@ impl ScriptingEngine {
                 record! {
                     event => primitive!(3 |kind_name, code_name, value|
                                            Action::Event{kind_name, code_name, value}),
+                    syn => Action::Syn,
                     key => primitive!(1 |key_name| Action::Key(key_name)),
+                    button => primitive!(1 |key_name| Action::Button(key_name)),
+                    press => primitive!(1 |key_name| Action::Press(key_name)),
+                    release => primitive!(1 |key_name| Action::Release(key_name)),
+                    repeat => primitive!(1 |key_name| Action::Repeat(key_name)),
+                    press_release => primitive!(1 |key_name| Action::PressRelease(key_name)),
+                    abs => primitive!(2 |abs_name, value| Action::Abs(abs_name, value)),
+                    rel => primitive!(2 |rel_name, value| Action::Rel(rel_name, value)),
+                    xy => primitive!(2 |value_x, value_y| Action::XY(value_x, value_y)),
                 },
             )
         }
@@ -48,7 +57,8 @@ impl ScriptingEngine {
     pub fn make_func(&self, s: &String) -> IrwirGluonFunc {
         let prelude = indoc!(
             r#"
-            let { event, key } = import! irwir_internals
+            let { event, syn, button, key, press, release, repeat, press_release,
+                  abs, rel, xy } = import! irwir_internals
             \value ->
         "#
         );
