@@ -26,6 +26,8 @@ use uinput_device::UInputDevice;
 #[derive(VmType, Getable, Pushable, Debug, PartialEq)]
 #[gluon(vm_type = "Action")]
 pub enum Action {
+    Combo(Vec<Action>),
+    Nothing,
     Event {
         kind_name: String,
         code_name: String,
@@ -48,7 +50,7 @@ impl Action {
         &self,
         parent_event: InputEvent,
         uinput_device: &UInputDevice,
-        _: &ScriptingEngine,
+        scripting_engine: &ScriptingEngine,
     ) {
         let InputEvent { time, value, .. } = parent_event;
         let simulate_key = |key_name: &String, value| {
@@ -59,6 +61,12 @@ impl Action {
             )))
         };
         match self {
+            Action::Combo(actions) => {
+                for action in actions {
+                    action.execute(parent_event, uinput_device, scripting_engine);
+                }
+            }
+            Action::Nothing => {}
             Action::Syn => uinput_device.simulate(InputEvent::from(SynchronizeEvent::new(
                 time,
                 SynchronizeKind::Report,

@@ -35,6 +35,8 @@ impl ScriptingEngine {
             ExternModule::new(
                 vm,
                 record! {
+                    combo => primitive!(1 |actions| Action::Combo(actions)),
+                    nothing => Action::Nothing,
                     event => primitive!(3 |kind_name, code_name, value|
                                            Action::Event{kind_name, code_name, value}),
                     syn => Action::Syn,
@@ -57,7 +59,8 @@ impl ScriptingEngine {
     pub fn make_func(&self, s: &String) -> IrwirGluonFunc {
         let prelude = indoc!(
             r#"
-            let { event, syn, button, key, press, release, repeat, press_release,
+            let { combo, nothing, event, syn,
+                  button, key, press, release, repeat, press_release,
                   abs, rel, xy } = import! irwir_internals
             \value ->
         "#

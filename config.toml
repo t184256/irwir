@@ -21,7 +21,7 @@ TEST_REL = 'KeyE'
 [map]
 KEY_A = 'key "KeyB"'
 KEY_B = 'event "Key" "KeyA" value'
-KEY_C = 'if value == 0 then (press_release "KeyC") else (press_release "KeyD")'
+KEY_C = 'if value == 0 then combo [press_release "KeyC", press_release "KeyD"] else nothing'
 TEST_ABS_1 = 'xy 200 400'
 TEST_ABS_2 = 'xy 100 300'
 TEST_ABS_3 = 'button "ButtonLeft"'
