@@ -70,7 +70,7 @@ mod tests {
         let action: Action = f.call(3).unwrap();
         match action {
             Action::Key(key_action) => {
-                assert_eq!(key_action, Key::new("KeyA".to_string()));
+                assert_eq!(key_action, "KeyA");
             }
             _ => {
                 unreachable!();
